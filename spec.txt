@@ -1,0 +1,100 @@
+UMACapture — Full Specification
+================================
+
+Overview
+--------
+A Python/Tkinter desktop tool for Windows that captures a screen region multiple
+times (as the user scrolls content), then auto-detects overlapping areas and
+stitches all frames into a single tall image.
+
+
+1. Platform & Stack
+-------------------
+- Language : Python (Windows)
+- GUI      : Tkinter (simple toolbar layout)
+- Key libs : Pillow (image processing), mss or pyautogui (screen capture),
+             numpy/opencv (overlap detection), win32clipboard (clipboard copy)
+
+
+2. GUI Layout
+-------------
+- Top bar: a simple horizontal row of buttons (see section 6).
+- Main area: empty until stitching completes, then displays the final stitched
+  image (scrollable if taller than the window).
+- Status bar: one-line text showing current state, e.g. "3 frames captured".
+
+
+3. Workflow
+-----------
+
+Step 1 — Select Region
+  - User clicks "Select Region" button.
+  - The app window hides and the full screen dims (semi-transparent overlay).
+  - User click-and-drags to draw a rectangle; releasing the mouse confirms the
+    selection.
+  - The app window re-appears. Selected region coordinates are stored.
+  - The region can be re-selected at any time before stitching.
+
+Step 2 — Capture Frames
+  - User clicks "Capture" button (one click = one screenshot of the selected
+    region).
+  - Each captured frame is stored in memory in order.
+  - The status bar shows the running frame count, e.g. "2 frames captured".
+  - "Stitch" button is disabled until at least 2 frames have been captured.
+
+Step 3 — Detect & Remove Identical Top Region
+  - Triggered automatically when "Stitch" is clicked.
+  - Pixel-perfect comparison: scan row-by-row from the top of all frames to find
+    the maximum number of rows that are identical across every frame.
+  - Crop that identical top block out of all frames except the first (frame 0
+    keeps its full top).
+
+Step 4 — Detect & Remove Overlapping Regions Between Consecutive Frames
+  - For each adjacent pair of frames (after step 3 cropping), use approximate
+    template matching to find where the bottom of frame N overlaps with the top
+    of frame N+1.
+  - A fixed similarity threshold is used (tunable in code during development).
+  - If no overlap is detected for any pair, show an error dialog describing which
+    pair failed, and abort the stitch entirely.
+  - On success, crop the detected overlap from the top of frame N+1 so the seam
+    is seamless.
+
+Step 5 — Stitch & Output
+  - Concatenate all cropped frames vertically into one final image.
+  - Automatically copy the result to the Windows clipboard.
+  - Display the stitched image in the main area of the GUI.
+  - Enable the "Save to File" button.
+
+
+4. Buttons (Top Bar)
+--------------------
+| Button          | State rules                                         |
+|-----------------|-----------------------------------------------------|
+| Select Region   | Always enabled                                      |
+| Capture         | Enabled only after a region has been selected       |
+| Stitch          | Enabled only when >= 2 frames captured              |
+| Save to File    | Enabled only after a successful stitch              |
+| Reset           | Always enabled; clears frames, result, and status   |
+
+
+5. Save to File
+---------------
+- Opens a standard "Save As" dialog filtered to PNG (*.png).
+- Saves the stitched image as a lossless PNG.
+
+
+6. Reset
+--------
+- Clears all captured frames from memory.
+- Clears the stitched result and hides it from the main area.
+- Resets status bar to idle.
+- Does NOT clear the currently selected region (user can immediately re-capture
+  the same area).
+
+
+7. Error Handling
+-----------------
+- Overlap detection failure (step 4): modal error dialog, stitch aborted.
+- No region selected when Capture is clicked: show a warning (button should be
+  disabled, but guard defensively).
+- Clipboard copy failure: show a non-fatal warning; stitched image still shown.
